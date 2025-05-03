@@ -251,7 +251,6 @@ async def _run_request(
 @click.argument('url_arg', required=False)
 @click.option('-u', '--url', help='Target URL to scan (http(s)://hostname[:port])')
 @click.option('-t', '--type', help='Comma-separated vulnerability types to test (e.g., "cl.te,te.cl")')
-@click.option('--h2', is_flag=True, help='Test HTTP/2 techniques')
 @click.option('-o', '--output', help='Output file for results (JSON)')
 @click.option('-v', '--verbose', is_flag=True, help='Verbose output')
 @click.option('--verify-ssl', is_flag=True, help='Verify SSL certificates')
@@ -259,12 +258,11 @@ async def _run_request(
 @click.option('-e', '--exit-first', is_flag=True, help='Stop after finding the first vulnerability')
 @click.option('-H', '--header', multiple=True, help='Custom header to include in requests (format: "Name: Value")')
 @click.option('-f', '--file', help='Path to file containing Transfer-Encoding header variations')
-@click.option('--h2-payload-placement', type=click.Choice(['normal_header', 'custom_header_value', 'custom_header_name']), help='Where to place the HTTP/2 payload (normal_header, custom_header_value, custom_header_name)')
+@click.option('--h2-payload-placement', type=click.Choice(['normal_header', 'custom_header_value', 'custom_header_name', 'request_line']), help='Where to place the HTTP/2 payload (normal_header, custom_header_value, custom_header_name, request_line)')
 def scan(
     url_arg: Optional[str],
     url: Optional[str],
     type: Optional[str],
-    h2: bool,
     output: Optional[str],
     verbose: bool,
     verify_ssl: bool,
@@ -349,13 +347,6 @@ def scan(
             console.print("[bold red]Error:[/bold red] No valid vulnerability types specified")
             sys.exit(1)
 
-    # Resolve the headers file path
-    headers_file = None
-    if file:
-        headers_file = file
-    elif os.path.exists(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "payloads", "te_headers.json")):
-        headers_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "payloads", "te_headers.json")
-    
     # Run the selected detectors
     results = {}
     for vuln_type in vulnerability_types:
@@ -372,7 +363,6 @@ def scan(
                 'verbose': verbose,
                 'timeout': timeout,
                 'exit_first': exit_first,
-                'headers_file': headers_file,
                 'custom_headers': custom_headers,
             }
             

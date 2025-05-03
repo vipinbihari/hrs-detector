@@ -23,7 +23,7 @@ from colorama import Fore, Style, init
 # Initialize colorama
 init(autoreset=True)
 
-async def test_cl_te_with_header(url: str, te_header: str, verbose: bool = False, timeout: float = 5.0, custom_headers: List[Tuple[str, str]] = None) -> Dict:
+async def test_cl_te_with_header(url: str, te_header: Dict, verbose: bool = False, timeout: float = 5.0, custom_headers: List[Tuple[str, str]] = None) -> Dict:
     """Test for CL.TE vulnerability using a specific Transfer-Encoding header variation.
     
     Args:
@@ -51,7 +51,7 @@ async def test_cl_te_with_header(url: str, te_header: str, verbose: bool = False
     use_tls = scheme == 'https'
     
     if verbose:
-        print(f"\nTesting with header: {te_header.replace('\n', '\\n')}")
+        print(f"\nTesting with header: {te_header['header_name']}:{te_header['header_value'].replace('\n', '\\n')}")
     
     # Create HTTP client for this test
     test_client = HTTP1Client(
@@ -88,24 +88,13 @@ async def test_cl_te_with_header(url: str, te_header: str, verbose: bool = False
             headers.extend(custom_headers)
             
         # Process the Transfer-Encoding header
-        # Handle special cases like newlines, tabs, etc.
-        if '\n' in te_header:
-            # Handle multi-line headers (split by \n)
-            header_lines = te_header.split('\n')
-            for line in header_lines:
-                if ':' in line:
-                    name, value = line.split(':', 1)
-                    headers.append((name, value.lstrip()))
-                else:
-                    # Handle case where there's no colon
-                    headers.append((line, ''))
-        else:
-            # Handle normal headers or those with tabs
-            if ':' in te_header:
-                name, value = te_header.split(':', 1)
-                headers.append((name, value.lstrip()))
-            else:
-                headers.append((te_header, ''))
+        # Add the main header
+        headers.append((te_header['header_name'], te_header['header_value']))
+        
+        # Add any extra headers if present
+        if 'extra_headers' in te_header:
+            for extra_header in te_header['extra_headers']:
+                headers.append((extra_header['header_name'], extra_header['header_value']))
         
         # Prepare body according to the example
         # If the front-end uses Content-Length and back-end uses Transfer-Encoding,
@@ -156,6 +145,84 @@ async def test_cl_te_with_header(url: str, te_header: str, verbose: bool = False
         if verbose:
             print(f"Response time: {test_time:.3f} seconds")
             
+        # If we detected a potential vulnerability (timeout or significant delay),
+        # send a third request with proper Content-Length and properly terminated chunked body
+        # to confirm the vulnerability
+        if result['timed_out']:
+            if verbose:
+                print(f"{Fore.CYAN}Potential vulnerability detected (request timed out), sending confirmation request...{Style.RESET_ALL}")
+            
+            # Prepare headers with accurate Content-Length and the same Transfer-Encoding variation
+            confirm_headers = [
+                ('Host', host),
+                ('Content-Type', 'application/x-www-form-urlencoded'),
+                ('Content-Length', '11'),  # Accurate length for the properly terminated body
+            ]
+            
+            # Add any custom headers provided
+            if custom_headers:
+                confirm_headers.extend(custom_headers)
+                
+            # Process the Transfer-Encoding header the same way as before
+            confirm_headers.append((te_header['header_name'], te_header['header_value']))
+            
+            # Add any extra headers if present
+            if 'extra_headers' in te_header:
+                for extra_header in te_header['extra_headers']:
+                    confirm_headers.append((extra_header['header_name'], extra_header['header_value']))
+            
+            # Prepare body with proper chunked encoding termination
+            confirm_body = (
+                # First chunk header (size 1)
+                b"1\r\n"
+                # Chunk data ('Z')
+                b"Z\r\n"
+                # Proper chunked encoding termination
+                b"0\r\n\r\n"
+            )
+            
+            # Build the raw request for later display
+            confirm_raw_request = f"POST {path} HTTP/1.1\r\n"
+            for name, value in confirm_headers:
+                confirm_raw_request += f"{name}: {value}\r\n"
+            confirm_raw_request += "\r\n"
+            confirm_raw_request += confirm_body.decode('utf-8', errors='replace')
+            
+            result['confirm_raw_request'] = confirm_raw_request
+            
+            confirm_start_time = time.time()
+            try:
+                confirm_info, _ = await test_client.send_request(
+                    method="POST",
+                    path=path,
+                    headers=confirm_headers,
+                    body=confirm_body,
+                )
+                confirm_time = time.time() - confirm_start_time
+                result['confirm_timed_out'] = False
+                result['confirm_status_code'] = confirm_info.get('status_code', 0)
+                result['confirm_time'] = confirm_time
+                
+                if verbose:
+                    print(f"Confirmation response status: {result['confirm_status_code']}")
+                    print(f"Confirmation response time: {confirm_time:.3f} seconds")
+                
+                # If the confirmation request doesn't time out, the server is vulnerable
+                # (A properly formatted request is processed normally)
+                result['vulnerable'] = True
+                if verbose:
+                    print(f"{Fore.RED}Vulnerability confirmed! The properly terminated request completed successfully.{Style.RESET_ALL}")
+                
+            except asyncio.TimeoutError:
+                confirm_time = time.time() - confirm_start_time
+                result['confirm_timed_out'] = True
+                if verbose:
+                    print("Confirmation request timed out - this is unexpected")
+            except Exception as e:
+                result['confirm_error'] = str(e)
+                if verbose:
+                    print(f"Error in confirmation request: {e}")
+            
         return result
     
     except Exception as e:
@@ -199,30 +266,38 @@ async def test_cl_te(url: str, verbose: bool = False, timeout: float = 5.0,
                 # Load headers from JSON file
                 headers_data = json.load(f)
                 te_headers = []
+                
+                # Process the new JSON format with header_name and header_value fields
                 for entry in headers_data:
-                    # Extract header from each entry
-                    header = entry.get('header')
-                    if header:
-                        te_headers.append(header)
+                    if 'header_name' in entry and 'header_value' in entry:
+                        # Store the entire entry for later use
+                        te_headers.append(entry)
                     
             print(f"{Fore.CYAN}Loaded {len(te_headers)} header variations from {headers_file}{Style.RESET_ALL}")
         except Exception as e:
             print(f"{Fore.RED}Error loading headers file: {e}{Style.RESET_ALL}")
-            te_headers = ["Transfer-Encoding: chunked"]
+            # Default fallback header
+            te_headers = [{
+                "description": "Standard chunked encoding",
+                "header_name": "Transfer-Encoding",
+                "header_value": "chunked"
+            }]
     else:
-        # Default list of Transfer-Encoding header variations
+        # Default list of Transfer-Encoding header variations in the new format
         te_headers = [
-            "Transfer-Encoding: chunked",
-            "Transfer-Encoding: xchunked",
-            "Transfer-Encoding : chunked",
-            "Transfer-Encoding: x",
-            "Transfer-Encoding:\tchunked",
-            " Transfer-Encoding: chunked",
-            "X: X\nTransfer-Encoding: chunked",
-            "Transfer-Encoding\n: chunked",
+            {
+                "description": "Standard chunked encoding",
+                "header_name": "Transfer-Encoding",
+                "header_value": "chunked"
+            },
+            {
+                "description": "Space after header name",
+                "header_name": "Transfer-Encoding ",
+                "header_value": "chunked"
+            }
         ]
         print(f"{Fore.CYAN}Using {len(te_headers)} default header variations{Style.RESET_ALL}")
-
+    
     # First, send a normal request to establish baseline response time
     print(f"\n{Fore.CYAN}Sending baseline request...{Style.RESET_ALL}")
     baseline_client = HTTP1Client(
@@ -265,25 +340,19 @@ async def test_cl_te(url: str, verbose: bool = False, timeout: float = 5.0,
             time_ratio = 0
         
         # Determine if this variation indicates a vulnerability
-        if result['timed_out'] or (time_ratio > 3 and result['test_time'] > 3):
+        if result['timed_out'] or result.get('vulnerable', False):
             # Print newline if we're using the progress indicator
             if not verbose:
                 print()
                 
             # Get the description of the header variation
-            description = "Unknown variation"
-            if headers_file and os.path.exists(headers_file):
-                # Try to find the description in the original JSON data
-                for entry in headers_data:
-                    if entry.get('header') == te_header:
-                        description = entry.get('description', 'Unknown variation')
-                        break
-                        
+            description = te_header['description']
+            
             print(f"\n{Fore.RED}[!] Potential CL.TE vulnerability detected{Style.RESET_ALL} with header variation: {Fore.YELLOW}{description}{Style.RESET_ALL}")
             print(f"The test request took {Fore.YELLOW}{time_ratio:.1f}x{Style.RESET_ALL} longer than the baseline request.")
             
             # Display the header with escaped control characters for clarity
-            escaped_header = te_header.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+            escaped_header = f"{te_header['header_name']}:{te_header['header_value'].replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')}"
             print(f"{Fore.CYAN}Header used: {escaped_header}{Style.RESET_ALL}")
             
             print(f"\n{Fore.CYAN}Raw request that triggered the vulnerability:{Style.RESET_ALL}")
@@ -312,9 +381,12 @@ async def test_cl_te(url: str, verbose: bool = False, timeout: float = 5.0,
         print(f"\n{Fore.CYAN}Vulnerable headers:{Style.RESET_ALL}")
         for header, description in vulnerable_headers:
             # Display the header with escaped control characters for clarity
-            escaped_header = header.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
-            print(f"- {Fore.YELLOW}{description}{Style.RESET_ALL}")
-            print(f"  Header: {Fore.CYAN}{escaped_header}{Style.RESET_ALL}")
+            escaped_header = f"{header['header_name']}:{header['header_value'].replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')}"
+            print(f"Header_Description: {Fore.YELLOW}{description}{Style.RESET_ALL}")
+            print(f"Actual_Header_Name: {Fore.CYAN}{header['header_name'].replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')}{Style.RESET_ALL}")
+            print(f"Actual_Header_Value: {Fore.CYAN}{header['header_value'].replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')}{Style.RESET_ALL}")
+            print(f"Vulnerability_Type: {Fore.CYAN}CL.TE{Style.RESET_ALL}")
+            print(f"Vulnerable_URL: {Fore.CYAN}{url}{Style.RESET_ALL}")
             print()
             
             # Add to findings list for return value
@@ -346,7 +418,7 @@ def main():
         for header_str in args.header:
             try:
                 name, value = header_str.split(':', 1)
-                custom_headers.append((name.strip(), value.strip()))
+                custom_headers.append((name, value))
             except ValueError:
                 print(f"{Fore.RED}Invalid header format: {header_str}. Use 'Name: Value' format.{Style.RESET_ALL}")
                 sys.exit(1)

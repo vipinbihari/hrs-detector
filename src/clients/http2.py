@@ -40,8 +40,8 @@ class HTTP2Client(BaseClient):
         host: str,
         port: int,
         use_tls: bool = True,
-        timeout: float = 15.0,
-        connect_timeout: float = 5.0,
+        timeout: float = 5.0,
+        connect_timeout: float = 3.0,
         verify_ssl: bool = False,
         force_http2: bool = False,
         verbose: bool = False,
@@ -564,7 +564,21 @@ class HTTP2Client(BaseClient):
         
         # Add custom headers
         for name, value in headers:
-            h2_headers.append((name.lower(), value))
+            if name.startswith(':'):
+                # This is a pseudo-header, check if it already exists
+                replaced = False
+                for i, (header_name, _) in enumerate(h2_headers):
+                    if header_name == name:
+                        # Replace the existing pseudo-header
+                        h2_headers[i] = (name, value)
+                        replaced = True
+                        break
+                # If not replaced, add it as a new pseudo-header
+                if not replaced:
+                    h2_headers.append((name, value))
+            else:
+                # Regular header, just add it
+                h2_headers.append((name.lower(), value))
         
         # Log the complete request headers including pseudo-headers
         if self.logger.level <= logging.DEBUG:
@@ -606,114 +620,6 @@ class HTTP2Client(BaseClient):
             self._h2_conn.send_data(stream_id, body, end_stream=end_stream)
             self._writer.write(self._h2_conn.data_to_send())
             await self._writer.drain()
-        
-        # Wait for response
-        await self._process_incoming_data(stream_id)
-        
-        # Parse response
-        response_info, response_body = self._parse_response(stream_id)
-        
-        # Record end time
-        end_time = time.time()
-        response_info['response_time'] = end_time - start_time
-        
-        # Log the response
-        self.logger.debug(f"Received response: {response_info['status_code']} ({response_info['response_time']:.6f}s)")
-        for name, value in response_info.get('headers', []):
-            self.logger.debug(f"  {name}: {value}")
-        self.logger.debug(f"  Body: {len(response_body)} bytes")
-        
-        return response_info, response_body
-    
-    async def send_partial_body(
-        self,
-        method: str,
-        path: str,
-        headers: List[Tuple[str, str]],
-        body: bytes,
-        content_length: int,
-        end_stream: bool = False,
-    ) -> Tuple[Dict[str, Any], bytes]:
-        """Send a request with a partial body.
-        
-        This method allows sending an HTTP/2 request with a body that doesn't match
-        the content-length header, which is useful for detecting H2.CL vulnerabilities.
-        
-        Args:
-            method: HTTP method (GET, POST, etc.)
-            path: Request path
-            headers: List of (name, value) header tuples
-            body: Partial body to send
-            content_length: Content-Length header value (can be different from len(body))
-            end_stream: Whether to end the stream after sending the partial body
-            
-        Returns:
-            Tuple of (response_info, response_body)
-        """
-        if not self._connected:
-            await self.connect()
-        
-        if not self._h2_conn:
-            raise ConnectionError("HTTP/2 connection not established")
-        
-        # Create a new stream
-        stream_id = self._h2_conn.get_next_available_stream_id()
-        self._stream_id = stream_id
-        
-        # Clear previous response data for this stream
-        self._response_events[stream_id] = []
-        self._response_data[stream_id] = bytearray()
-        self._response_streams[stream_id] = False
-        
-        # Prepare headers with content-length
-        h2_headers = [
-            (':method', method),
-            (':path', path),
-            (':scheme', 'https' if self.use_tls else 'http'),
-            (':authority', f"{self.host}:{self.port}"),
-            ('content-length', str(content_length)),
-        ]
-        
-        # Add custom headers (except content-length, which we've already added)
-        for name, value in headers:
-            if name.lower() != 'content-length':
-                h2_headers.append((name.lower(), value))
-        
-        # Log the request
-        self.logger.debug(f"Sending partial body request to {path} (stream_id={stream_id})")
-        self.logger.debug(f"  Content-Length: {content_length}, Actual body length: {len(body)}")
-        for name, value in h2_headers:
-            self.logger.debug(f"  {name}: {value}")
-        
-        # When verbose mode is enabled (-v flag), log the complete raw request
-        # This is different from DEBUG level logging and is controlled by the verbose flag
-        if hasattr(self, 'verbose') and self.verbose:
-            self.logger.info(f"\n==== COMPLETE HTTP/2 REQUEST WITH PARTIAL BODY ====")
-            self.logger.info(f"Target: {self.host}:{self.port}")
-            self.logger.info(f"Stream ID: {stream_id}")
-            self.logger.info(f"Content-Length header: {content_length}, Actual body length: {len(body)}")
-            self.logger.info("Headers:")
-            for name, value in h2_headers:
-                self.logger.info(f"  {name}: {value}")
-            self.logger.info(f"Body ({len(body)} bytes):")
-            try:
-                body_str = body.decode('utf-8')
-                self.logger.info(f"  {body_str}")
-            except UnicodeDecodeError:
-                self.logger.info(f"  [Binary data: {body.hex()}]")
-        
-        # Record start time for timing measurements
-        start_time = time.time()
-        
-        # Send headers
-        self._h2_conn.send_headers(stream_id, h2_headers, end_stream=False)
-        self._writer.write(self._h2_conn.data_to_send())
-        await self._writer.drain()
-        
-        # Send partial body
-        self._h2_conn.send_data(stream_id, body, end_stream=end_stream)
-        self._writer.write(self._h2_conn.data_to_send())
-        await self._writer.drain()
         
         # Wait for response
         await self._process_incoming_data(stream_id)

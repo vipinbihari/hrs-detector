@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP Request Smuggling Detector</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Use CDN for ansi_up.js -->
+    <script src="https://cdn.jsdelivr.net/npm/ansi_up@5.1.0/ansi_up.min.js"></script>
+    <!-- Add Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <nav class="app-header">
+            <div class="logo-container">
+                <div class="logo">HRS</div>
+                <div class="title-container">
+                    <h1>HTTP Request Smuggling Detector</h1>
+                    <p>Web GUI for <code>hrs_finder</code> command-line tool</p>
+                </div>
+            </div>
+            <div class="controls">
+                <button id="theme-toggle" class="theme-toggle-button" aria-label="Toggle dark/light mode">
+                    <span class="light-icon">🌞</span>
+                    <span class="dark-icon">🌙</span>
+                </button>
+            </div>
+        </nav>
+
+        <main class="app-content">
+            <div class="panel config-panel">
+                <div class="panel-header">
+                    <h2>Scan Configuration</h2>
+                </div>
+                <div class="panel-body">
+                    <form id="scan-form" class="form-grid">
+                        <div class="form-group full-width">
+                            <label for="target-url">Target URL <span class="required">*</span></label>
+                            <input type="url" id="target-url" name="target-url" required placeholder="https://example.com">
+                        </div>
+        
+                        <div class="form-group full-width">
+                            <label>Vulnerability Types</label>
+                            <div class="checkbox-grid">
+                                <div class="checkbox-item">
+                                    <input type="checkbox" id="type-cl-te" name="types" value="cl.te" checked>
+                                    <label for="type-cl-te">CL.TE</label>
+                                </div>
+                                <div class="checkbox-item">
+                                    <input type="checkbox" id="type-te-cl" name="types" value="te.cl" checked>
+                                    <label for="type-te-cl">TE.CL</label>
+                                </div>
+                                <div class="checkbox-item">
+                                    <input type="checkbox" id="type-h2-cl" name="types" value="h2.cl" checked>
+                                    <label for="type-h2-cl">H2.CL</label>
+                                </div>
+                                <div class="checkbox-item">
+                                    <input type="checkbox" id="type-h2-te" name="types" value="h2.te" checked>
+                                    <label for="type-h2-te">H2.TE</label>
+                                </div>
+                            </div>
+                        </div>
+        
+                        <div class="form-group full-width">
+                            <label>Custom Headers</label>
+                            <div id="headers-container" class="headers-container">
+                                <!-- Dynamic header inputs will be added here -->
+                            </div>
+                            <button type="button" id="add-header" class="btn btn-outline"><span class="icon">+</span> Add Header</button>
+                        </div>
+        
+                        <div class="form-group half-width">
+                            <label for="timeout">Timeout (seconds)</label>
+                            <input type="number" id="timeout" name="timeout" value="5.0" min="0.1" step="0.1">
+                        </div>
+        
+                        <div class="form-group half-width" id="h2-payload-group">
+                            <label for="h2-payload-placement">H2 Payload Placement</label>
+                            <select id="h2-payload-placement" name="h2-payload-placement">
+                                <option value="normal_header">Normal Header</option>
+                                <option value="custom_header_value">Custom Header Value</option>
+                                <option value="custom_header_name">Custom Header Name</option>
+                                <option value="request_line">Request Line</option>
+                            </select>
+                        </div>
+        
+                        <div class="form-group checkbox-single half-width">
+                            <input type="checkbox" id="exit-first" name="exit-first" checked>
+                            <label for="exit-first">Exit after first vulnerability</label>
+                        </div>
+        
+                        <div class="form-group checkbox-single half-width">
+                            <input type="checkbox" id="verbose" name="verbose">
+                            <label for="verbose">Verbose output</label>
+                        </div>
+        
+                        <div class="form-actions full-width">
+                            <button type="submit" id="scan-button" class="btn btn-primary"><span class="icon">▶</span> Start Scan</button>
+                            <button type="button" id="clear-button" class="btn btn-secondary"><span class="icon">🗑️</span> Clear Output</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="panel results-panel">
+                <div class="panel-header">
+                    <h2>Scan Results</h2>
+                    <div class="status-container">
+                        <span id="scan-status" class="status-indicator">Ready</span>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="output-toolbar">
+                        <button id="clear-output" class="icon-button" title="Clear Output">
+                            <span class="material-icons">clear_all</span>
+                        </button>
+                        <button id="copy-output" class="icon-button" title="Copy to Clipboard">
+                            <span class="material-icons">content_copy</span>
+                        </button>
+                    </div>
+                    <div id="output-area" class="output-area">Scan results will appear here...</div>
+                </div>
+            </div>
+            
+            <!-- Separated Vulnerability Findings Panel -->
+            <div id="findings-container" class="panel findings-panel">
+                <div class="panel-header">
+                    <h2>Vulnerability Findings</h2>
+                    <button id="reset-findings" class="icon-button" title="Reset Findings">
+                        <span class="material-icons">delete_sweep</span>
+                    </button>
+                </div>
+                <div class="panel-body">
+                    <div class="table-container">
+                        <table id="findings-table" class="findings-table">
+                            <thead>
+                                <tr>
+                                    <th>URL</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th>Header Name</th>
+                                    <th>Header Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="findings-body">
+                                <!-- Findings will be added here dynamically -->
+                            </tbody>
+                        </table>
+                        <div id="no-findings-message" class="no-findings-message">
+                            <span class="material-icons">search_off</span>
+                            <p>No vulnerabilities found yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="app-footer">
+            <p>HTTP Request Smuggling Detector - <a href="https://github.com/yourusername/hrs_finder" target="_blank">GitHub</a></p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

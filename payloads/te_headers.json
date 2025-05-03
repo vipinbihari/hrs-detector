@@ -1,73 +1,98 @@
 [
   {
     "description": "Standard chunked encoding",
-    "header": "Transfer-Encoding: chunked"
+    "header_name": "Transfer-Encoding",
+    "header_value": "chunked"
   },
   {
     "description": "Modified encoding name",
-    "header": "Transfer-Encoding: xchunked"
+    "header_name": "Transfer-Encoding",
+    "header_value": "xchunked"
   },
   {
     "description": "Extra space before colon",
-    "header": "Transfer-Encoding : chunked"
+    "header_name": "Transfer-Encoding ",
+    "header_value": "chunked"
   },
   {
     "description": "Invalid encoding value",
-    "header": "Transfer-Encoding: x"
+    "header_name": "Transfer-Encoding",
+    "header_value": "x"
   },
   {
     "description": "Tab after colon",
-    "header": "Transfer-Encoding:\tchunked"
+    "header_name": "Transfer-Encoding",
+    "header_value": "\tchunked"
   },
   {
     "description": "Leading space in header name",
-    "header": " Transfer-Encoding: chunked"
+    "header_name": " Transfer-Encoding",
+    "header_value": "chunked"
   },
   {
     "description": "Lowercase header name",
-    "header": "Transfer-encoding: chunked"
+    "header_name": "Transfer-encoding",
+    "header_value": "chunked"
   },
-  {"description": "chunked with invalid value x",
-    "header": "Transfer-Encoding: chunked\r\nTransfer-Encoding: x"
+  {
+    "description": "chunked with invalid value x",
+    "header_name": "Transfer-Encoding",
+    "header_value": "chunked",
+    "extra_headers": [
+      {
+        "header_name": "Transfer-Encoding",
+        "header_value": "x"
+      }
+    ]
   },
   {
     "description": "All lowercase",
-    "header": "transfer-encoding: chunked"
+    "header_name": "transfer-encoding",
+    "header_value": "chunked"
   },
   {
     "description": "Underscore instead of hyphen",
-    "header": "Transfer_Encoding: chunked"
+    "header_name": "Transfer_Encoding",
+    "header_value": "chunked"
   },
   {
     "description": "Uppercase encoding value",
-    "header": "Transfer-Encoding: CHUNKED"
+    "header_name": "Transfer-Encoding",
+    "header_value": "CHUNKED"
   },
   {
     "description": "Semicolon after value",
-    "header": "Transfer-Encoding: chunked;"
+    "header_name": "Transfer-Encoding",
+    "header_value": "chunked;"
   },
   {
     "description": "Multiple encodings (identity first)",
-    "header": "Transfer-Encoding: identity, chunked"
+    "header_name": "Transfer-Encoding",
+    "header_value": "identity, chunked"
   },
   {
     "description": "Multiple encodings (chunked first)",
-    "header": "Transfer-Encoding: chunked, identity"
+    "header_name": "Transfer-Encoding",
+    "header_value": "chunked, identity"
   },
   {
     "description": "Identity encoding only",
-    "header": "Transfer-Encoding: identity"
+    "header_name": "Transfer-Encoding",
+    "header_value": "identity"
   },
   {
     "description": "Multiline header with prefix",
-    "header": "X: X\nTransfer-Encoding: chunked"
+    "header_name": "X: X\nTransfer-Encoding",
+    "header_value": "chunked"
   },
   {
     "description": "Split header name and value",
-    "header": "Transfer-Encoding\n: chunked"
+    "header_name": "Transfer-Encoding\n",
+    "header_value": "chunked"
   },
   {
     "description": "Split header with space after newline",
-    "header": "Transfer-Encoding\n : chunked"
+    "header_name": "Transfer-Encoding\n ",
+    "header_value": "chunked"
   }
 ]

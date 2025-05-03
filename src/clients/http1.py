@@ -34,8 +34,8 @@ class HTTP1Client(BaseClient):
         host: str,
         port: int,
         use_tls: bool = True,
-        timeout: float = 15.0,
-        connect_timeout: float = 5.0,
+        timeout: float = 5.0,
+        connect_timeout: float = 3.0,
         keep_alive: bool = False,
         verify_ssl: bool = False,
     ) -> None:
