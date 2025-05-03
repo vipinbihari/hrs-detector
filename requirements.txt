@@ -1,0 +1,8 @@
+click
+colorama
+rich
+h2
+hpack
+pytest
+mypy
+ruff
