@@ -1,0 +1,38 @@
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Project specific files
+prd.md
+.windsurfrule
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# Local configuration
+.env
+.env.local
+
+# Output files
+*.json
+!package.json
+!package-lock.json
