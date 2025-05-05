@@ -1,6 +1,6 @@
 # HTTP Request Smuggling Detection Tool (hrs_finder)
 
-A Python toolkit for detecting HTTP request smuggling vulnerabilities, including modern HTTP/2-based variants.
+A Python toolkit for detecting HTTP request smuggling vulnerabilities, including modern HTTP/2-based variants. It also includes a web-based GUI for easier interaction.
 
 ## Overview
 
@@ -18,6 +18,12 @@ The tool features custom HTTP/1.1 and HTTP/2 clients that allow sending non-RFC-
 
 ```text
 hrs_finder/
+├── frontend/           # Web GUI Application
+│   ├── static/         # CSS, JavaScript, Images
+│   ├── templates/      # HTML Templates
+│   ├── server.py       # FastAPI Backend for GUI
+│   ├── README.md       # Frontend specific documentation
+│   └── project_content.md # Frontend specific documentation
 ├── src/                # Main source code
 │   ├── __init__.py
 │   ├── cli/            # Command-line interface
@@ -104,6 +110,29 @@ pip install .
 ## Usage
 
 This tool utilizes predefined header variations stored in JSON format within the `payloads/` directory (`te_headers.json`, `cl_headers.json`) for constructing test requests.
+
+### Web GUI
+
+A web-based graphical user interface is available in the `frontend` directory. It allows you to run scans and view results through your browser.
+
+**Prerequisites:**
+
+```bash
+# Navigate to the frontend directory
+cd frontend
+
+# Install GUI dependencies
+pip install fastapi uvicorn websockets pydantic
+```
+
+**Running the GUI:**
+
+```bash
+# Start the server from the frontend directory
+python server.py
+```
+
+Then, open your browser and navigate to `http://localhost:8000`.
 
 ### Running Directly with Python
 
