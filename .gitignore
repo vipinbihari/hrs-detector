@@ -10,13 +10,14 @@ __pycache__/
 .pytest_cache/
 
 # Project specific files
-prd.md
+.windsurfrule
 
 # IDE files
 .idea/
 .vscode/
 *.swp
 *.swo
+*.prd
 
 # Distribution / packaging
 dist/

@@ -1,196 +1,403 @@
-# HRS Finder Frontend Project Documentation
+# HTTP Request Smuggling Detection Tool - Technical Documentation
 
-## Overview
+## Project Overview
 
-This document provides a comprehensive description of the HRS Finder frontend implementation. The frontend is a modern web application that serves as a graphical user interface for the HTTP Request Smuggling (HRS) detection tool. It provides an intuitive interface for configuring and running scans, displaying real-time results, and offers theme customization options and vulnerability findings display.
+The HTTP Request Smuggling Detection Tool (hrs_finder) is a Python toolkit designed to detect HTTP request smuggling vulnerabilities in web applications and servers. It focuses on various vulnerability types including CL.TE, TE.CL, H2.TE, and H2.CL, with plans to support CL.0 and H2.0 variants in the future.
+
+The tool features custom HTTP/1.1 and HTTP/2 clients that allow sending non-RFC-compliant requests required for detecting these vulnerabilities. It uses a time-based detection technique to identify potential vulnerabilities without affecting other users or causing side effects.
 
 ## Project Structure
 
 ```
-/frontend/
-├── index.html        # Main HTML file that defines the structure of the UI
-├── style.css         # CSS file for styling the UI with theme support
-├── script.js         # JavaScript for client-side functionality and WebSocket communication
-├── server.py         # FastAPI backend server that bridges the UI with the HRS finder tool
-├── README.md         # Project setup and usage instructions
-└── project_content.md # This file - detailed documentation
+hrs_finder/
+├── frontend/           # Web GUI Application (not covered in this documentation)
+├── src/                # Main source code
+│   ├── __init__.py     # Package initialization
+│   ├── cli/            # Command-line interface
+│   │   ├── __init__.py
+│   │   └── main.py     # CLI entry point
+│   ├── clients/        # HTTP clients
+│   │   ├── __init__.py
+│   │   ├── base.py     # Base client interface
+│   │   ├── http1.py    # HTTP/1.1 client using asyncio
+│   │   └── http2.py    # HTTP/2 client using h2
+│   ├── detectors/      # Vulnerability detector modules
+│   │   ├── __init__.py
+│   │   ├── cl_te_detector.py  # CL.TE vulnerability detector
+│   │   ├── te_cl_detector.py  # TE.CL vulnerability detector
+│   │   ├── h2_cl_detector.py  # H2.CL vulnerability detector
+│   │   └── h2_te_detector.py  # H2.TE vulnerability detector
+│   └── utils/          # Utility functions
+│       ├── __init__.py
+│       ├── tls.py      # TLS utilities
+│       └── logging.py  # Logging utilities
+├── payloads/           # Test payloads (header variations)
+│   └── te_headers.json # Transfer-Encoding variations
+├── main.py             # Direct execution wrapper
+├── hrs_finder.sh       # Shell script wrapper for main CLI
+├── setup.py            # Package installation script
+├── requirements.txt    # Package dependencies
+├── README.md           # Project documentation
+└── project_content.md  # This technical documentation
 ```
 
-## Component Description
+## Core Components
 
-### 1. Frontend UI (index.html)
+### 1. Entry Points
 
-The HTML structure defines a modern and responsive user interface with the following main components:
+#### main.py
 
-- **App Header**:
-  - Logo and title
-  - Theme toggle button (sun/moon icon) for switching between light and dark modes
+The main entry point for direct execution of the tool without using module syntax.
 
-- **App Content**:
-  - **Scan Configuration Panel**:
-    - Target URL input field
-    - Vulnerability type checkboxes (CL.TE, TE.CL, H2.CL, H2.TE)
-    - Custom headers section with dynamic addition of header fields
-    - Configuration options (timeout, H2 payload placement, etc.)
-    - Scan button to initiate the scanning process
-  
-  - **Scan Results Panel**:
-    - Status indicator showing current scan status
-    - Output area displaying real-time scan results with scrollbar
-    - Toolbar with clear and copy buttons
-  
-  - **Vulnerability Findings Panel**:
-    - Table displaying structured information about discovered vulnerabilities
-    - Columns for URL, type, description, header name, and header value
-    - Reset button to clear findings independently
+- **Purpose**: Allows running the tool directly with `python main.py` instead of using module syntax
+- **Functions**:
+  - Adds the project directory to `sys.path`
+  - Imports and runs the `main()` function from `src.cli.main`
 
-- **App Footer**:
-  - Basic footer with link to GitHub repository
+#### hrs_finder.sh
 
-### 2. Styling (style.css)
+A shell script wrapper for the main CLI.
 
-The CSS file implements a modern, clean design with:
+- **Purpose**: Provides an easy way to run the tool without installation
+- **Usage**: `./hrs_finder.sh scan https://example.com`
 
-- **Theme Support**:
-  - CSS variables for light and dark themes
-  - Seamless transitions between themes
-  - System preference detection for initial theme
+### 2. Command-Line Interface (src/cli/)
 
-- **Responsive Layout**:
-  - Grid-based layout with named template areas
-  - Mobile-first approach with responsive breakpoints
-  - Proper panel arrangement (side-by-side on desktop, stacked on mobile)
+#### src/cli/main.py
 
-- **UI Components**:
-  - Panel-based layout with consistent styling
-  - Form elements with modern styling
-  - Status indicators with color-coding
-  - Output styling with different formats for logs, errors, and debug messages
-  - Findings table with distinctive header row and consistent row styling
+The main CLI entry point for the tool, implemented using the Click library.
 
-### 3. Client-Side Logic (script.js)
+- **Purpose**: Provides the command-line interface for the tool
+- **Commands**:
+  - `scan`: Scan a target for HTTP request smuggling vulnerabilities
+  - `request`: Send a custom HTTP/1.1 request to a target server
+- **Functions**:
+  - `cli()`: Main CLI group with global options
+  - `request()`: Command for sending custom HTTP/1.1 requests
+  - `_run_request()`: Helper function to run an HTTP request
+  - `scan()`: Command for scanning targets for vulnerabilities
+  - `main()`: Main entry point for the CLI
 
-The JavaScript file handles all client-side functionality:
+##### scan command
 
-- **DOM Manipulation**:
-  - Form element handling
-  - Dynamic addition/removal of header input fields
-  - Output area updates
-  - Vulnerability findings table population
+```
+hrs_finder scan [OPTIONS] [URL_ARG]
+```
 
-- **WebSocket Communication**:
-  - Establishing real-time communication with the backend
-  - Handling different message types (status, output, errors)
-  - Ensuring proper connection flow (WebSocket first, then scan request)
+- **Arguments**:
+  - `url_arg`: Target URL (positional argument, optional)
+- **Options**:
+  - `-u, --url`: Target URL (alternative to positional argument)
+  - `-t, --type`: Comma-separated vulnerability types to test (e.g., "cl.te,te.cl")
+  - `-o, --output`: Output file for results (JSON)
+  - `-v, --verbose`: Enable verbose output
+  - `--verify-ssl`: Verify SSL certificates
+  - `--timeout`: Request timeout in seconds (default: 5.0)
+  - `-e, --exit-first`: Stop after finding the first vulnerability
+  - `-H, --header`: Custom header to include in requests (can be used multiple times)
+  - `-f, --file`: Path to file containing Transfer-Encoding header variations
+  - `--h2-payload-placement`: Where to place the HTTP/2 payload (normal_header, custom_header_value, custom_header_name, request_line)
+- **Returns**: Exits with code 0 if no vulnerabilities found, 1 if vulnerabilities found, 2 if errors occurred
 
-- **Vulnerability Findings Parsing**:
-  - Extracting vulnerability information from scan output using regex
-  - Parsing structured data from output markers
-  - Populating the findings table with extracted data
+##### request command
 
-- **Theme Management**:
-  - Detecting system color scheme preference
-  - Storing user theme preference in localStorage
-  - Toggling between light and dark themes
+```
+hrs_finder request [OPTIONS] URL
+```
 
-- **Form Handling**:
-  - Collecting and validating form data
-  - Dynamically showing/hiding H2 payload options based on selected vulnerability types
-  - Converting form data to JSON for backend communication
+- **Arguments**:
+  - `url`: Target URL
+- **Options**:
+  - `--method, -m`: HTTP method to use (default: GET)
+  - `--header, -H`: HTTP header (can be used multiple times)
+  - `--data, -d`: HTTP request body
+  - `--raw, -r`: Path to file containing raw HTTP request
+  - `--keep-alive`: Keep connection alive after request
+  - `--timeout, -t`: Read timeout in seconds (default: 15.0)
+  - `--connect-timeout, -c`: Connection timeout in seconds (default: 5.0)
+  - `--output, -o`: Output file for response
+  - `--verbose, -v`: Enable verbose output
+  - `--verify-ssl`: Verify SSL certificates
+- **Returns**: Displays the response information and body
 
-- **Scan Process**:
-  - Initiating scans via API
-  - Updating UI during scanning
-  - Processing and displaying real-time scan results
+### 3. HTTP Clients (src/clients/)
 
-### 4. Backend Server (server.py)
+#### src/clients/base.py
 
-The FastAPI server bridges the frontend UI with the HRS finder tool:
+Defines the abstract base class that all HTTP clients must implement.
 
-- **API Endpoints**:
-  - `/scan` - POST endpoint to start a new scan
-  - `/ws/{client_id}` - WebSocket endpoint for real-time communication
+- **Classes**:
+  - `BaseClient`: Abstract base class for HTTP clients
+- **Methods**:
+  - `connect()`: Establish a connection to the target server
+  - `close()`: Close the connection to the target server
+  - `send_request()`: Send an HTTP request to the target server
+  - `send_raw()`: Send raw bytes over the connection
+  - `receive_raw()`: Receive raw bytes from the connection
 
-- **Process Management**:
-  - Converting scan requests to command-line arguments
-  - Executing the HRS finder tool as a subprocess
-  - Streaming output in real-time to the frontend
-  - Managing concurrent scan processes
+#### src/clients/http1.py
 
-- **WebSocket Handling**:
-  - Maintaining active WebSocket connections
-  - Sending structured JSON messages to the client
-  - Handling connection lifecycle (connect, disconnect, errors)
+Custom HTTP/1.1 client implementation using asyncio for low-level socket control.
 
-## Key Implementation Details
+- **Classes**:
+  - `HTTP1Client`: Custom HTTP/1.1 client for sending non-RFC-compliant requests
+- **Methods**:
+  - `connect()`: Establish a connection to the target server
+  - `close()`: Close the connection to the target server
+  - `send_raw()`: Send raw bytes over the connection
+  - `receive_raw()`: Receive raw bytes from the connection
+  - `_build_request()`: Build a raw HTTP/1.1 request
+  - `send_request()`: Send an HTTP request to the target server
+  - `_parse_response()`: Parse an HTTP/1.1 response
+  - `_read_headers()`: Read HTTP headers from the connection
+  - `_read_content_length_body()`: Read a body with a known Content-Length
+  - `_read_chunked_body()`: Read a chunked-encoded body
+  - `_read_until_close()`: Read body data until the connection closes
+  - `pipeline_requests()`: Send multiple requests in a pipeline
 
-### WebSocket Communication Flow
+#### src/clients/http2.py
 
-1. Frontend establishes a WebSocket connection to `/ws/{client_id}`
-2. After successful connection, frontend sends a scan request to `/scan` with the same client_id
-3. Backend starts the HRS finder process and streams output to the corresponding WebSocket
-4. Frontend processes and displays messages in real-time
+Custom HTTP/2 client implementation using the h2 library for framing control.
 
-### Theme System
+- **Classes**:
+  - `HTTP2Client`: Custom HTTP/2 client for sending non-RFC-compliant requests
+- **Methods**:
+  - `connect()`: Establish a connection to the target server
+  - `close()`: Close the connection to the target server
+  - `send_raw()`: Send raw bytes over the connection
+  - `receive_raw()`: Receive raw bytes from the connection
+  - `_process_incoming_data()`: Process incoming HTTP/2 frames
+  - `send_request()`: Send an HTTP/2 request to the target server
+  - `send_malformed_headers()`: Send a request with potentially malformed headers
+  - `send_padded_data()`: Send a request with padded data frames
+  - `_parse_response()`: Parse an HTTP/2 response
 
-The theme system uses CSS variables to define colors for light and dark modes:
+### 4. Vulnerability Detectors (src/detectors/)
 
-1. Default theme is based on system preference (using `prefers-color-scheme` media query)
-2. User can toggle between themes using the theme button
-3. Theme preference is stored in localStorage for persistence
-4. Theme changes are applied without page reload
+#### src/detectors/cl_te_detector.py
 
-### Dynamic Header Management
+Detector for CL.TE (Content-Length / Transfer-Encoding) HTTP request smuggling vulnerabilities.
 
-Custom headers are managed dynamically:
+- **Functions**:
+  - `test_cl_te_with_header()`: Test for CL.TE vulnerability using a specific Transfer-Encoding header variation
+  - `test_cl_te()`: Test for CL.TE vulnerability using time-delay technique with multiple header variations
+  - `main()`: Parse command-line arguments and run tests
+- **Detection Method**:
+  - Sends a request with conflicting Content-Length and Transfer-Encoding headers
+  - If the front-end uses Content-Length and back-end uses Transfer-Encoding, the back-end will time out waiting for the next chunk
+  - Confirms vulnerability by sending a properly terminated chunked body
 
-1. Users can add multiple custom header fields
-2. Each header has a name and value input, plus a remove button
-3. Headers are collected and sent as part of the scan configuration
+#### src/detectors/te_cl_detector.py
 
-### Vulnerability Findings Table
+Detector for TE.CL (Transfer-Encoding / Content-Length) HTTP request smuggling vulnerabilities.
 
-The application automatically extracts and displays vulnerability findings:
+- **Functions**:
+  - `test_te_cl_with_header()`: Test for TE.CL vulnerability using a specific Transfer-Encoding header variation
+  - `test_te_cl()`: Test for TE.CL vulnerability using time-delay technique with multiple header variations
+  - `main()`: Parse command-line arguments and run tests
+- **Detection Method**:
+  - Sends a request with conflicting Transfer-Encoding and Content-Length headers
+  - If the front-end uses Transfer-Encoding and back-end uses Content-Length, the back-end will process only part of the body
+  - Uses timing differences to detect the vulnerability
 
-1. Parses scan output for specific markers (e.g., Vulnerability_Type:, Vulnerable_URL:)
-2. Extracts structured data using regular expressions
-3. Populates a dedicated table with formatted columns
-4. Provides table-specific controls separate from the scan output
-5. Displays vulnerability details in a structured, easy-to-read format
+#### src/detectors/h2_te_detector.py
 
-### Scan Output Processing
+Detector for H2.TE (HTTP/2 to HTTP/1 Transfer-Encoding) HTTP request smuggling vulnerabilities.
 
-The application handles different types of output:
+- **Functions**:
+  - `test_h2_te()`: Test for H2.TE vulnerability using time-delay technique
+  - `main()`: Parse command-line arguments and run tests
+- **Detection Method**:
+  - Sends an HTTP/2 request with a Transfer-Encoding header that might be smuggled to an HTTP/1.1 back-end
+  - Uses timing differences to detect the vulnerability
 
-1. Regular log messages are displayed as-is
-2. Error messages (prefixed with "ERROR:") are styled differently
-3. Debug messages (containing "Debug:") have special formatting
-4. ANSI color codes are converted to HTML for proper display
-5. Output area has a fixed height with scrollbar for overflow
+#### src/detectors/h2_cl_detector.py
 
-## Troubleshooting
+Detector for H2.CL (HTTP/2 to HTTP/1 Content-Length) HTTP request smuggling vulnerabilities.
 
-### Common Issues
+- **Functions**:
+  - `test_h2_cl()`: Test for H2.CL vulnerability using time-delay technique
+  - `main()`: Parse command-line arguments and run tests
+- **Detection Method**:
+  - Sends an HTTP/2 request with a Content-Length header that might be smuggled to an HTTP/1.1 back-end
+  - Uses timing differences to detect the vulnerability
 
-- **Scan Not Starting**: Ensure the WebSocket connection is established before initiating a scan
-- **No Output**: Check browser console for WebSocket errors
-- **H2 Payload Options Not Showing**: Verify that H2.CL or H2.TE vulnerability types are selected
-- **Findings Not Appearing in Table**: Check that scan output contains correctly formatted finding markers
+### 5. Utilities (src/utils/)
 
-### Debug Tips
+#### src/utils/tls.py
 
-- Enable verbose output for detailed scan information
-- Check browser developer tools for WebSocket communication logs
-- Server logs provide additional information about process execution
-- Console logs include information about vulnerability data extraction
+TLS utilities for HTTP clients.
 
-## Future Enhancements
+- **Functions**:
+  - `create_ssl_context()`: Create an SSL context for HTTP connections
+  - `get_http1_ssl_context()`: Get an SSL context configured for HTTP/1.1
+  - `get_http2_ssl_context()`: Get an SSL context configured for HTTP/2
+  - `get_negotiated_protocol()`: Get the negotiated ALPN protocol from an SSL object
 
-Potential improvements to consider:
+#### src/utils/logging.py
 
-- Add scan history feature for previous scan results
-- Implement save/load functionality for scan configurations
-- Add export options for vulnerability findings (CSV, JSON, PDF)
-- Implement user authentication for multi-user environments
-- Add more detailed visualizations for vulnerability analysis
-- Implement pagination for large result sets in the findings table
+Logging utilities for the HTTP Request Smuggling Detection Tool.
+
+- **Functions**:
+  - `setup_logging()`: Set up logging for the application
+  - `get_logger()`: Get the application logger
+  - `log_request()`: Log an HTTP request
+  - `log_response()`: Log an HTTP response
+
+### 6. Payloads
+
+#### payloads/te_headers.json
+
+JSON file containing Transfer-Encoding header variations for testing.
+
+- **Format**: Array of objects with the following properties:
+  - `description`: Human-readable description of the header variation
+  - `header_name`: The header name to use (e.g., "Transfer-Encoding")
+  - `header_value`: The header value to use (e.g., "chunked")
+  - `extra_headers`: Optional array of additional headers to include
+
+## Configuration Files
+
+### setup.py
+
+Package installation script for the tool.
+
+- **Package Name**: hrs_finder
+- **Version**: 0.1.0
+- **Dependencies**:
+  - click (>=8.0.0)
+  - colorama (>=0.4.4)
+  - rich (>=10.0.0)
+  - h2 (>=4.0.0)
+  - hpack (>=4.0.0)
+- **Entry Points**:
+  - `hrs_finder=src.cli.main:main`
+
+### requirements.txt
+
+Package dependencies for the tool.
+
+- click
+- colorama
+- rich
+- h2
+- hpack
+- pytest
+- mypy
+- ruff
+
+## Vulnerability Types
+
+### HTTP/1.1 Vulnerabilities
+
+#### CL.TE
+
+Front-end server uses Content-Length, back-end uses Transfer-Encoding.
+
+- **Detection Method**: Time-based detection using malformed chunked encoding
+- **Detector Module**: src/detectors/cl_te_detector.py
+
+#### TE.CL
+
+Front-end server uses Transfer-Encoding, back-end uses Content-Length.
+
+- **Detection Method**: Time-based detection using malformed chunked encoding
+- **Detector Module**: src/detectors/te_cl_detector.py
+
+### HTTP/2 Vulnerabilities
+
+#### H2.TE
+
+HTTP/2 front-end smuggles Transfer-Encoding to an HTTP/1.1 back-end.
+
+- **Detection Method**: Time-based detection using HTTP/2 request with smuggled Transfer-Encoding header
+- **Detector Module**: src/detectors/h2_te_detector.py
+
+#### H2.CL
+
+HTTP/2 front-end smuggles Content-Length to an HTTP/1.1 back-end.
+
+- **Detection Method**: Time-based detection using HTTP/2 request with smuggled Content-Length header
+- **Detector Module**: src/detectors/h2_cl_detector.py
+
+## Usage Examples
+
+### Scan Command
+
+```bash
+# Scan for all supported vulnerability types
+hrs_finder scan https://example.com
+
+# Scan for specific types (comma-separated, no spaces)
+hrs_finder scan https://example.com --type cl.te,te.cl
+
+# Scan for specific types (comma-separated with spaces, requires quotes)
+hrs_finder scan https://example.com --type "cl.te, te.cl"
+
+# Scan with custom headers
+hrs_finder scan https://example.com -H "Cookie: session=1234" -H "X-Forwarded-For: 127.0.0.1"
+
+# Scan with verbose output
+hrs_finder scan https://example.com -v
+
+# Scan with output to a JSON file
+hrs_finder scan https://example.com --output results.json
+
+# Stop scanning after the first vulnerability is found
+hrs_finder scan https://example.com -e
+# or
+hrs_finder scan https://example.com --exit-first
+
+# Specify payload placement for H2.CL/H2.TE (e.g., smuggle via header name)
+hrs_finder scan https://example.com --type h2.cl,h2.te --h2-payload-placement custom_header_name
+```
+
+### Request Command
+
+```bash
+# Send a simple GET request
+hrs_finder request https://example.com
+
+# Send a POST request with data
+hrs_finder request https://example.com -X POST -d "param=value"
+
+# Send a request with custom headers
+hrs_finder request https://example.com -H "User-Agent: Custom-Agent" -H "Cookie: session=1234"
+
+# Send a raw request (completely custom)
+hrs_finder request https://example.com --raw "GET /path HTTP/1.1\r\nHost: example.com\r\n\r\n"
+```
+
+## Running Methods
+
+### Direct Python Execution
+
+```bash
+# Run with the main.py wrapper
+python3 main.py scan https://example.com
+
+# Run with module syntax
+python -m src.cli.main scan https://example.com
+
+# Run a specific detector directly
+python -m src.detectors.cl_te_detector https://example.com
+```
+
+### Shell Script Wrapper
+
+```bash
+# Make the script executable
+chmod +x hrs_finder.sh
+
+# Run a scan
+./hrs_finder.sh scan https://example.com
+```
+
+### Installed Package
+
+```bash
+# Install the package
+pip install .
+
+# Run the command
+hrs_finder scan https://example.com
